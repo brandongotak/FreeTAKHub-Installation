@@ -1,6 +1,9 @@
 ---
-fts_config_path: /opt/FTSConfig.yaml
-fts_db_path: /opt/FreeTAKServer.db
+# FTS keeps certs, database and data packages under its persistence path,
+# outside the venv, so they survive reinstalls
+fts_data_path: /opt/fts
+fts_config_path: "{{ fts_data_path }}/FTSConfig.yaml"
+fts_db_path: "{{ fts_data_path }}/FTSDataBase.db"
 
 fts_python_packages: "{{ fts_venv }}/lib/python{{ python3_version }}"
 fts_install_path: "{{ fts_python_packages }}/site-packages/FreeTAKServer"

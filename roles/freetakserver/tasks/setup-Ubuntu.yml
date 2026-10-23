@@ -16,7 +16,28 @@
 #    - "git -C /FreeTakServer reset --hard 109b674"
 #    - "pip install /FreeTakServer"
 
+# digitalpy imports pkg_resources at runtime, which setuptools 81 removed
+- name: Pin setuptools for digitalpy
+  pip:
+    name: "setuptools<81"
+    virtualenv: "{{ fts_venv }}"
+
 - name: "Install {{ fts_pip_package_name }}"
   pip:
-    name: "{{ fts_pip_package_name }}=={{ fts_version }}"
+    name: "{{ fts_pip_spec }}"
     virtualenv: "{{ fts_venv }}"
+
+# pip skips a git install whose version number hasn't changed, so force the
+# FTS package itself to be rebuilt so re-running the installer picks up updates
+- name: "Reinstall {{ fts_pip_package_name }} code"
+  pip:
+    name: "{{ fts_pip_spec }}"
+    virtualenv: "{{ fts_venv }}"
+    extra_args: "--force-reinstall --no-deps"
+  when: fts_pip_spec is search('^git\\+')
+
+- name: Create FTS data directory
+  file:
+    path: "{{ fts_data_path }}"
+    state: directory
+    mode: 0755

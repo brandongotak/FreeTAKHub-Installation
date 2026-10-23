@@ -4,6 +4,11 @@ fts_ipv4: 0.0.0.0
 
 fts_pip_package_name: FreeTAKServer
 
+# pip requirement spec used to install FTS. The PyPI release (2.2.1) no longer
+# starts with current dependencies, so install the patched fork instead.
+# Override with e.g. `fts_pip_spec="FreeTAKServer==2.2.1"` to use PyPI.
+fts_pip_spec: "git+https://github.com/brandongotak/FreeTakServer.git@native-ubuntu-install"
+
 fts_service_name: fts
 
 # Set initial service state. Recommended values: `started` or `stopped`.
