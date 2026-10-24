@@ -109,57 +109,43 @@
 #        body_format: json
 #        status_code: 200
 
-    - name: Import Node-RED FTH Config flow via HTTP POST
+    # The flow files have no flow id, so match existing flows by tab label:
+    # PUT replaces a flow imported by an earlier run, POST adds a new one.
+    # POSTing again fails with "duplicate id" because the node ids are fixed.
+    - name: Get existing Node-RED flows
       uri:
-        url: "http://{{ noderedserver_ipv4 }}:{{ noderedserver_port }}/flow"
-        method: POST
+        url: "http://{{ noderedserver_ipv4 }}:{{ noderedserver_port }}/flows"
+        method: GET
         headers:
-          Content-Type: application/json
           Node-RED-API-Version: v1
-          Node-RED-Deployment-Type: full
           Authorization: Bearer {{ nodered_admin_token }}
-        body: "{{ lookup('file', playbook_dir + '/FreeTAKHub-Webmap/freetakhub_config.json') }}"
-        body_format: json
         status_code: 200
+      register: nodered_existing_flows
 
-    - name: Import FTH Videochecker flow via HTTP POST
-      uri:
-        url: "http://{{ noderedserver_ipv4 }}:{{ noderedserver_port }}/flow"
-        method: POST
-        headers:
-          Content-Type: application/json
-          Node-RED-API-Version: v1
-          Node-RED-Deployment-Type: full
-          Authorization: Bearer {{ nodered_admin_token }}
-        body: "{{ lookup('file', playbook_dir + '/FreeTAKHub_VideoChecker/freetakhub_videochecker.json') }}"
-        body_format: json
-        status_code: 200
+    - name: Map existing flow labels to ids
+      set_fact:
+        nodered_existing_tabs: "{{ nodered_existing_flows.json | selectattr('type', 'equalto', 'tab') | items2dict(key_name='label', value_name='id') }}"
 
-    - name: Import FTH SALUTE flow via HTTP POST
+    - name: Import FTH flows (add or replace)
+      vars:
+        flow_body: "{{ lookup('file', playbook_dir + '/' + item) | from_json }}"
+        flow_id: "{{ nodered_existing_tabs.get(flow_body.label, '') }}"
       uri:
-        url: "http://{{ noderedserver_ipv4 }}:{{ noderedserver_port }}/flow"
-        method: POST
+        url: "http://{{ noderedserver_ipv4 }}:{{ noderedserver_port }}/flow{{ ('/' + flow_id) if flow_id else '' }}"
+        method: "{{ 'PUT' if flow_id else 'POST' }}"
         headers:
           Content-Type: application/json
           Node-RED-API-Version: v1
           Node-RED-Deployment-Type: full
           Authorization: Bearer {{ nodered_admin_token }}
-        body: "{{ lookup('file', playbook_dir + '/FreeTAKHub_Forms_SALUTE/freetakhub_salute.json') }}"
+        body: "{{ flow_body }}"
         body_format: json
         status_code: 200
-
-    - name: Import FTH Webmap flow via HTTP POST
-      uri:
-        url: "http://{{ noderedserver_ipv4 }}:{{ noderedserver_port }}/flow"
-        method: POST
-        headers:
-          Content-Type: application/json
-          Node-RED-API-Version: v1
-          Node-RED-Deployment-Type: full
-          Authorization: Bearer {{ nodered_admin_token }}
-        body: "{{ lookup('file', playbook_dir + '/FreeTAKHub-Webmap/freetakhub_webmap.json') }}"
-        body_format: json
-        status_code: 200
+      loop:
+        - FreeTAKHub-Webmap/freetakhub_config.json
+        - FreeTAKHub_VideoChecker/freetakhub_videochecker.json
+        - FreeTAKHub_Forms_SALUTE/freetakhub_salute.json
+        - FreeTAKHub-Webmap/freetakhub_webmap.json
 
 #    - name: Import Node-RED Videochecker flow via HTTP POST
 #      uri:
