@@ -98,6 +98,17 @@
     state: directory
     mode: 0755
 
+# systemd opens StandardOutput=append: files before LogsDirectory= would
+# create them, so the log directory has to exist already
+- name: Create log directory
+  tags: nodered
+  file:
+    path: "/var/log/{{ nodered_service_name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
 - name: Template unit file
   tags: nodered
   template:

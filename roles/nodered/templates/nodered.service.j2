@@ -23,8 +23,6 @@ EnvironmentFile=-/root/.node-red/environment
 # uncomment next line if you need to wait for time sync before starting
 #ExecStartPre=/bin/bash -c '/bin/journalctl -b -u systemd-timesyncd | /bin/grep -q "systemd-timesyncd.* Synchronized to time server"'
 
-# systemd creates /var/log/<name> for the append: targets below
-LogsDirectory={{ nodered_service_name }}
 StandardOutput=append:/var/log/{{ nodered_service_name }}/{{ nodered_service_name }}-stdout.log
 StandardError=append:/var/log/{{ nodered_service_name }}/{{ nodered_service_name }}-stderr.log
 

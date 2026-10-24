@@ -22,6 +22,16 @@
     # TCP only, as before, so RTSP works through the firewall
     - { regexp: '^rtspTransports:', line: 'rtspTransports: [tcp]' }
 
+# systemd opens StandardOutput=append: files before LogsDirectory= would
+# create them, so the log directory has to exist already
+- name: Create log directory
+  file:
+    path: "/var/log/{{ videoserver_service_name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
 - name: Template unit file
   template:
     src: mediamtx.service.j2

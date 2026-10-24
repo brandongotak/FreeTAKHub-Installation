@@ -43,6 +43,16 @@
     group: root
     mode: 0755
 
+# systemd opens StandardOutput=append: files before LogsDirectory= would
+# create them, so the log directory has to exist already
+- name: Create log directory
+  file:
+    path: "/var/log/{{ fts_enrollment_service_name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
 - name: Template enrollment unit file
   template:
     src: fts-enrollment.service.j2
