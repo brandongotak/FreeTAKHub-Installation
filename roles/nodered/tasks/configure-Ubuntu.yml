@@ -32,17 +32,19 @@
      'status' in nodered_service_status and
      nodered_service_status['status'] == 200
 
-- name: Clone FreeTAKHub_VideoChecker repository
+# the git module clones or updates in place, so reruns don't fail on an
+# existing checkout the way a bare `git clone` did
+- name: Clone or update Node-RED flow repositories
   tags: nodered
-  shell: git clone https://github.com/FreeTAKTeam/FreeTAKHub_VideoChecker.git
-
-- name: Clone FreeTAKHub_SALUTE repository
-  tags: nodered
-  shell: git clone https://github.com/FreeTAKTeam/FreeTAKHub_Forms_SALUTE.git
-
-- name: Clone FreeTAKHub_Webmap repository
-  tags: nodered
-  shell: git clone https://github.com/FreeTAKTeam/FreeTAKHub-Webmap.git
+  git:
+    repo: "https://github.com/FreeTAKTeam/{{ item }}.git"
+    dest: "{{ playbook_dir }}/{{ item }}"
+    force: true
+    update: true
+  loop:
+    - FreeTAKHub_VideoChecker
+    - FreeTAKHub_Forms_SALUTE
+    - FreeTAKHub-Webmap
 
 # - name: Clone FreeTAKHub_VideoChecker repository
 #   tags: nodered
