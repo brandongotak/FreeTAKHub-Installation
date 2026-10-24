@@ -5,7 +5,8 @@
     dest: "{{ fts_config_path }}"
     owner: root
     group: root
-    mode: 0644
+    # holds the cert password and websocket key
+    mode: 0600
 
 - name: Change FirstStart to False in MainConfig.py
   lineinfile:

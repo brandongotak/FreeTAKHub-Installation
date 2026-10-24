@@ -17,6 +17,11 @@ fts_fed_port: 9000
 fts_cot_to_db: true
 
 # Certs
-fts_federation_keypass: demopassfed
-fts_client_cert_password: demopasscert
-fts_websocket_key: YourWebsocketKey
+# Generated on the first run and stored on the server (the playbook runs
+# locally), then reused on every rerun so existing certificates keep working.
+# The client cert password must not change once certs exist, or ATAK reports
+# an invalid truststore.
+fts_secrets_path: /etc/freetakhub/secrets
+fts_federation_keypass: "{{ lookup('password', fts_secrets_path + '/fts_federation_keypass chars=ascii_letters,digits length=24') }}"
+fts_client_cert_password: "{{ lookup('password', fts_secrets_path + '/fts_client_cert_password chars=ascii_letters,digits length=24') }}"
+fts_websocket_key: "{{ lookup('password', fts_secrets_path + '/fts_websocket_key chars=ascii_letters,digits length=32') }}"
