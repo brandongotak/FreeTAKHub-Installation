@@ -1,8 +1,18 @@
 ---
 nodered_install_folder: "/root/.node-red"
 
+# NodeSource's nodejs package bundles npm
 nodered_apt_dependencies:
-  - npm
   - nodejs
+
+# Ubuntu's Node.js packages, whose files conflict with NodeSource's nodejs
+nodered_distro_nodejs_packages:
+  - nodejs
+  - npm
+  - nodejs-doc
+  - libnode-dev
+  - libnode72
+
+nodered_nodesource_key: /etc/apt/keyrings/nodesource.asc
 
 unit_files_location: /etc/systemd/system

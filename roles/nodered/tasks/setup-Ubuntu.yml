@@ -7,6 +7,61 @@
     do sleep 3; done;
   changed_when: false
 
+- name: Get installed Node.js version
+  tags: nodered
+  command: node --version
+  register: nodered_node_version
+  failed_when: false
+  changed_when: false
+
+- name: Remove distro Node.js older than {{ nodered_nodejs_major }}
+  tags: nodered
+  apt:
+    name: "{{ nodered_distro_nodejs_packages }}"
+    state: absent
+    autoremove: true
+  when:
+    - nodered_node_version.rc == 0
+    - (nodered_node_version.stdout | regex_replace('^v(\\d+).*$', '\\1') | int) < nodered_nodejs_major
+  register: nodered_old_nodejs_removed
+
+# Ubuntu's npm installs globals under /usr/local, NodeSource's under /usr; the
+# old node-red in /usr/local/bin would otherwise shadow the new one on PATH
+- name: Remove global npm packages left by the distro npm
+  tags: nodered
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/node-red
+    - /usr/local/bin/node-red-pi
+    - /usr/local/bin/node-red-admin
+    - /usr/local/lib/node_modules/node-red
+    - /usr/local/lib/node_modules/node-red-admin
+    - /usr/local/lib/node_modules/node-red-contrib-web-worldmap
+  when: nodered_old_nodejs_removed is changed
+
+- name: Create apt keyrings directory
+  tags: nodered
+  file:
+    path: "{{ nodered_nodesource_key | dirname }}"
+    state: directory
+    mode: 0755
+
+- name: Add NodeSource signing key
+  tags: nodered
+  get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: "{{ nodered_nodesource_key }}"
+    mode: 0644
+
+- name: "Add NodeSource Node.js {{ nodered_nodejs_major }} repository"
+  tags: nodered
+  apt_repository:
+    repo: "deb [signed-by={{ nodered_nodesource_key }}] https://deb.nodesource.com/node_{{ nodered_nodejs_major }}.x nodistro main"
+    filename: nodesource
+    update_cache: true
+
 - name: Install apt dependencies
   tags: nodered
   apt:
@@ -27,6 +82,14 @@
     name: "{{ item }}"
     path: "{{ nodered_install_folder }}"
   loop: "{{ nodered_nodes | list }}"
+
+# nodes installed under the old Node.js may include native addons
+- name: Rebuild Node-RED nodes for the new Node.js
+  tags: nodered
+  command: npm rebuild
+  args:
+    chdir: "{{ nodered_install_folder }}"
+  when: nodered_old_nodejs_removed is changed
 
 - name: Create flows directory
   tags: nodered

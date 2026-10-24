@@ -25,8 +25,13 @@ noderedserver_ipv4: 0.0.0.0
 
 noderedserver_port: 1880
 
+# Node-RED 4 needs Node.js 18+; Ubuntu 22.04 ships 12, so use NodeSource.
+# Staying on 4: the flows use node-red-dashboard, which is unmaintained and
+# not verified on Node-RED 5.
+nodered_nodejs_major: 22
+
 nodered_npm_packages:
-  - node-red@v2-maintenance
+  - node-red@4
   - node-red-admin
   - node-red-contrib-web-worldmap
 
