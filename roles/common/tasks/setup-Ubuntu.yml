@@ -1,6 +1,6 @@
 ---
 - name: Update apt
-  shell: sudo apt-get update 
+  shell: sudo apt-get update
   register: apt_update
   retries: 5
   ignore_errors: true
@@ -12,15 +12,42 @@
     path: /usr/local/bin/systemctl
   register: systemctl_file
 
+# The systemctl replacement only exists for containers without systemd. On a
+# real host it shadows /usr/bin/systemctl, so services run outside systemd
+# (no restart supervision) and inherit the caller's working directory.
+- name: Check for docker-systemctl-replacement on a systemd host
+  shell: grep -q docker-systemctl-replacement /usr/local/bin/systemctl
+  register: systemctl_replacement
+  failed_when: false
+  changed_when: false
+  when:
+    - ansible_service_mgr == 'systemd'
+    - systemctl_file.stat.exists
+
+- name: Remove docker-systemctl-replacement from a systemd host
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/systemctl
+    - /usr/local/bin/systemctl.backup
+  when:
+    - ansible_service_mgr == 'systemd'
+    - systemctl_replacement.rc is defined
+    - systemctl_replacement.rc == 0
+
 - name: Create systemctl backup
   copy:
     src: /usr/local/bin/systemctl
     dest: /usr/local/bin/systemctl.backup
     remote_src: true
-  when: systemctl_file.stat.exists
+  when:
+    - ansible_service_mgr != 'systemd'
+    - systemctl_file.stat.exists
 
 - name: Use systemctl workaround
   get_url:
     url: https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/master/files/docker/systemctl3.py
     dest: /usr/local/bin/systemctl
     mode: 0755
+  when: ansible_service_mgr != 'systemd'
