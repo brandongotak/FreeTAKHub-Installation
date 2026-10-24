@@ -15,8 +15,9 @@
 # The systemctl replacement only exists for containers without systemd. On a
 # real host it shadows /usr/bin/systemctl, so services run outside systemd
 # (no restart supervision) and inherit the caller's working directory.
+# real systemctl is an ELF binary in /usr/bin; a script here is the replacement
 - name: Check for docker-systemctl-replacement on a systemd host
-  shell: grep -q docker-systemctl-replacement /usr/local/bin/systemctl
+  shell: head -c 2 /usr/local/bin/systemctl | grep -q '#!'
   register: systemctl_replacement
   failed_when: false
   changed_when: false
