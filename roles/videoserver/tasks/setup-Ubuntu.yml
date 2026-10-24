@@ -1,48 +1,37 @@
 ---
-- name: Determine CPU architecture
-  set_fact:
-    videoserver_architecture: "{{ ansible_architecture }}"
+- name: "Stop legacy {{ videoserver_legacy_service_name }} service"
+  service:
+    name: "{{ videoserver_legacy_service_name }}"
+    state: stopped
+    enabled: false
+  failed_when: false
 
-- name: Translate CPU architecture if x86_64
-  set_fact:
-    videoserver_architecture: "amd64"
-  when: videoserver_architecture == "x86_64"
+- name: "Remove legacy {{ videoserver_legacy_service_name }} files"
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ unit_files_location }}/{{ videoserver_legacy_service_name }}.service"
+    - "/usr/local/bin/{{ videoserver_legacy_service_name }}"
+    - "/opt/{{ videoserver_legacy_service_name }}.yml"
 
-- name: Translate CPU architecture if x86_64
-  set_fact:
-    videoserver_architecture: "arm64v8"
-  when: videoserver_architecture == "aarch64"
-
-- name: Get RTSP Simple Server release information with GitHub API
-  uri:
-    url: "{{ videoserver_api_url }}"
-    return_content: true
-  register: videoserver_response
-
-- name: Set facts from GitHub API release information
-  set_fact:
-    videoserver_download_url: "{{ videoserver_response.json.assets[videoserver_download_index].browser_download_url }}"
-
-- name: Download video-server package to /tmp
-  get_url:
-    url: "{{ videoserver_download_links[videoserver_architecture] }}"
-    dest: "/tmp/{{ videoserver_package_names[videoserver_architecture] }}"
-    owner: root
-    group: root
+- name: Create unpack directory
+  file:
+    path: "{{ videoserver_unpack_location }}"
+    state: directory
     mode: 0755
 
-- name: "Unarchive {{  videoserver_package_names[videoserver_architecture] }} to /tmp"
+- name: "Download and unarchive {{ videoserver_package_name }}"
   unarchive:
-    src: "/tmp/{{ videoserver_package_names[videoserver_architecture] }}"
-    dest: /tmp
+    src: "{{ videoserver_download_url }}"
+    dest: "{{ videoserver_unpack_location }}"
+    remote_src: true
     owner: root
     group: root
-    mode: 0755
-    remote_src: true
 
-- name: "Copy /tmp/{{ videoserver_executable }} to {{ videoserver_executable_location }}"
+- name: "Copy {{ videoserver_executable }} to {{ videoserver_executable_location }}"
   copy:
-    src: "/tmp/{{ videoserver_executable }}"
+    src: "{{ videoserver_unpack_location }}/{{ videoserver_executable }}"
     dest: "{{ videoserver_executable_location }}"
     owner: root
     group: root

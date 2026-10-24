@@ -41,8 +41,8 @@
     dest: "{{ playbook_dir }}/{{ item }}"
     force: true
     update: true
+  # VideoChecker is kept in this role (files/flows), patched for MediaMTX
   loop:
-    - FreeTAKHub_VideoChecker
     - FreeTAKHub_Forms_SALUTE
     - FreeTAKHub-Webmap
 
@@ -128,7 +128,7 @@
 
     - name: Import FTH flows (add or replace)
       vars:
-        flow_body: "{{ lookup('file', playbook_dir + '/' + item) | from_json }}"
+        flow_body: "{{ lookup('file', item) | from_json }}"
         flow_id: "{{ nodered_existing_tabs.get(flow_body.label, '') }}"
       uri:
         url: "http://{{ noderedserver_ipv4 }}:{{ noderedserver_port }}/flow{{ ('/' + flow_id) if flow_id else '' }}"
@@ -142,10 +142,12 @@
         body_format: json
         status_code: 200
       loop:
-        - FreeTAKHub-Webmap/freetakhub_config.json
-        - FreeTAKHub_VideoChecker/freetakhub_videochecker.json
-        - FreeTAKHub_Forms_SALUTE/freetakhub_salute.json
-        - FreeTAKHub-Webmap/freetakhub_webmap.json
+        - "{{ playbook_dir }}/FreeTAKHub-Webmap/freetakhub_config.json"
+        # VideoChecker flow from FreeTAKTeam/FreeTAKHub_VideoChecker@717a15b,
+        # switched to the MediaMTX v3 paths API
+        - "{{ role_path }}/files/flows/freetakhub_videochecker.json"
+        - "{{ playbook_dir }}/FreeTAKHub_Forms_SALUTE/freetakhub_salute.json"
+        - "{{ playbook_dir }}/FreeTAKHub-Webmap/freetakhub_webmap.json"
 
 #    - name: Import Node-RED Videochecker flow via HTTP POST
 #      uri:

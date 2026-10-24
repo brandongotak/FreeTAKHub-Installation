@@ -1,0 +1,16 @@
+[Unit]
+Description=MediaMTX video server
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+# systemd creates /var/log/<name> for the append: targets below
+LogsDirectory={{ videoserver_service_name }}
+StandardOutput=append:/var/log/{{ videoserver_service_name }}/{{ videoserver_service_name }}-stdout.log
+StandardError=append:/var/log/{{ videoserver_service_name }}/{{ videoserver_service_name }}-stderr.log
+ExecStart={{ videoserver_executable_location }} {{ videoserver_config_location }}
+
+[Install]
+WantedBy=multi-user.target

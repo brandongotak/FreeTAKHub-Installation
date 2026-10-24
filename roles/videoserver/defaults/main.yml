@@ -1,28 +1,29 @@
 ---
 videoserver_ipv4: 0.0.0.0
 
-videoserver_api_url: https://api.github.com/repositories/230660669/releases/latest
-videoserver_executable: rtsp-simple-server
-videoserver_config_file: rtsp-simple-server.yml
+# MediaMTX (formerly rtsp-simple-server)
+videoserver_version: v1.21.2
+videoserver_executable: mediamtx
+videoserver_config_file: mediamtx.yml
+videoserver_service_name: mediamtx
 
-videoserver_service_name: rtsp-simple-server
+# ansible_architecture -> MediaMTX release asset suffix
+videoserver_architectures:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armv7
+  armv6l: armv6
 
-videoserver_architecture: ""
+videoserver_architecture: "{{ videoserver_architectures[ansible_architecture] }}"
+videoserver_package_name: "mediamtx_{{ videoserver_version }}_linux_{{ videoserver_architecture }}.tar.gz"
+videoserver_download_url: "https://github.com/bluenviron/mediamtx/releases/download/{{ videoserver_version }}/{{ videoserver_package_name }}"
 
-videoserver_download_links:
-  armv6: "https://github.com/bluenviron/mediamtx/releases/download/v0.18.0/rtsp-simple-server_v0.18.0_linux_armv6.tar.gz"
-  armv7: "https://github.com/bluenviron/mediamtx/releases/download/v0.18.0/rtsp-simple-server_v0.18.0_linux_armv7.tar.gz"
-  arm64v8: "https://github.com/bluenviron/mediamtx/releases/download/v0.18.0/rtsp-simple-server_v0.18.0_linux_arm64v8.tar.gz"
-  amd64: "https://github.com/bluenviron/mediamtx/releases/download/v0.18.0/rtsp-simple-server_v0.18.0_linux_amd64.tar.gz"
+# Only Node-RED's VideoChecker flow on this host uses the control API
+videoserver_api_address: 127.0.0.1:9997
 
-videoserver_package_names:
-  armv6: "rtsp-simple-server_v0.18.0_linux_armv6.tar.gz"
-  armv7: "rtsp-simple-server_v0.18.0_linux_armv7.tar.gz"
-  arm64v8: "rtsp-simple-server_v0.18.0_linux_arm64v8.tar.gz"
-  amd64: "rtsp-simple-server_v0.18.0_linux_amd64.tar.gz"
+# The previous video server, removed when found
+videoserver_legacy_service_name: rtsp-simple-server
 
-# Set initial service state. Recommended values: `started` or `stopped`.
 videoserver_state: started
 
-# Enable service.
 videoserver_enabled: true

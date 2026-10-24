@@ -1,15 +1,30 @@
 ---
-- name: Template config file
-  template:
-    src: rtsp-simple-server.yml.j2
+# Start from the config bundled with the release so every key matches the
+# installed version, then change only what the hub needs.
+- name: Install bundled config file
+  copy:
+    src: "{{ videoserver_unpack_location }}/{{ videoserver_config_file }}"
     dest: "{{ videoserver_config_location }}"
     owner: root
     group: root
     mode: 0644
+    remote_src: true
+
+- name: Configure video server
+  lineinfile:
+    path: "{{ videoserver_config_location }}"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    # Node-RED's VideoChecker flow lists streams through the API
+    - { regexp: '^api:', line: 'api: true' }
+    - { regexp: '^apiAddress:', line: 'apiAddress: {{ videoserver_api_address }}' }
+    # TCP only, as before, so RTSP works through the firewall
+    - { regexp: '^rtspTransports:', line: 'rtspTransports: [tcp]' }
 
 - name: Template unit file
   template:
-    src: rtsp-simple-server.service.j2
+    src: mediamtx.service.j2
     dest: "{{ unit_files_location }}/{{ videoserver_service_name }}.service"
     owner: root
     group: root
@@ -18,7 +33,7 @@
 - name: Kill any currently running processes
   include_tasks: ../../common/tasks/kill.yml
   vars:
-    process: "rtsp-simple-server"
+    process: "{{ videoserver_executable_location }}"
 
 - name: Enable and set service
   include_tasks: ../../common/tasks/service.yml
