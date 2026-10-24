@@ -20,7 +20,8 @@ fts_enabled: true
 cfg_rpath: "core/configuration"
 
 # Username/password certificate enrollment on fts_enrollment_port, served with
-# a Let's Encrypt certificate for this domain. Empty disables it.
+# a Let's Encrypt certificate for this domain. Empty leaves it to be set up
+# later from the UI's configure page.
 fts_enrollment_domain: ""
 # optional email for Let's Encrypt expiry notices
 fts_enrollment_email: ""

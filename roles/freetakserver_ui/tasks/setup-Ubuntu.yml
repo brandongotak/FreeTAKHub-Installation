@@ -16,5 +16,14 @@
 
 - name: "Install {{ fts_ui_pip_package_name }}"
   pip:
-    name: "{{ fts_ui_pip_package_name }}"
+    name: "{{ fts_ui_pip_spec }}"
     virtualenv: "{{ fts_venv }}"
+
+# pip skips a git install whose version number hasn't changed, so force the
+# UI package itself to be rebuilt so re-running the installer picks up updates
+- name: "Reinstall {{ fts_ui_pip_package_name }} code"
+  pip:
+    name: "{{ fts_ui_pip_spec }}"
+    virtualenv: "{{ fts_venv }}"
+    extra_args: "--force-reinstall --no-deps"
+  when: fts_ui_pip_spec is search('^git\\+')

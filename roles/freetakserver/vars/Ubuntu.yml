@@ -5,7 +5,8 @@ fts_data_path: /opt/fts
 fts_config_path: "{{ fts_data_path }}/FTSConfig.yaml"
 fts_db_path: "{{ fts_data_path }}/FTSDataBase.db"
 
-fts_enrollment_cert_dir: "/etc/letsencrypt/live/{{ fts_enrollment_domain }}"
+# must match ENV_FILE in FreeTAKServer.core.util.enrollment_setup
+fts_enrollment_env_file: /etc/freetakhub/enrollment.env
 
 fts_python_packages: "{{ fts_venv }}/lib/python{{ python3_version }}"
 fts_install_path: "{{ fts_python_packages }}/site-packages/FreeTAKServer"

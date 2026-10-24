@@ -1,6 +1,9 @@
 [Unit]
 Description=FreeTAKServer certificate enrollment service
 After=network.target
+# written by FreeTAKServer.core.util.enrollment_setup (installer --domain or
+# the UI configure page) with the domain, port and Let's Encrypt cert paths
+ConditionPathExists={{ fts_enrollment_env_file }}
 
 [Service]
 Type=simple
@@ -11,9 +14,7 @@ StandardError=append:/var/log/{{ fts_enrollment_service_name }}/{{ fts_enrollmen
 WorkingDirectory={{ fts_data_path }}
 Environment="FTS_PERSISTENCE_PATH={{ fts_data_path }}"
 Environment="FTS_CONFIG_PATH={{ fts_config_path }}"
-Environment="FTS_ENROLLMENT_PORT={{ fts_enrollment_port }}"
-Environment="FTS_ENROLLMENT_CERTFILE={{ fts_enrollment_cert_dir }}/fullchain.pem"
-Environment="FTS_ENROLLMENT_KEYFILE={{ fts_enrollment_cert_dir }}/privkey.pem"
+EnvironmentFile={{ fts_enrollment_env_file }}
 ExecStart={{ fts_venv }}/bin/python3 -m FreeTAKServer.services.enrollment_service
 
 [Install]
