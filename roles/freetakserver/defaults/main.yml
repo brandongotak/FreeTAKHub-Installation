@@ -18,3 +18,11 @@ fts_state: started
 fts_enabled: true
 
 cfg_rpath: "core/configuration"
+
+# Username/password certificate enrollment on fts_enrollment_port, served with
+# a Let's Encrypt certificate for this domain. Empty disables it.
+fts_enrollment_domain: ""
+# optional email for Let's Encrypt expiry notices
+fts_enrollment_email: ""
+fts_enrollment_port: 8446
+fts_enrollment_service_name: fts-enrollment

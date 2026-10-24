@@ -34,3 +34,7 @@
 
 - name: Configure
   include_tasks: "configure-{{ ansible_distribution }}.yml"
+
+- name: Certificate enrollment
+  include_tasks: "enrollment-{{ ansible_distribution }}.yml"
+  when: fts_enrollment_domain | length > 0

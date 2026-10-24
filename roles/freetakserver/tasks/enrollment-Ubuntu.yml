@@ -1,0 +1,59 @@
+---
+- name: Install certbot
+  apt:
+    name: certbot
+
+- name: Check whether ufw is active
+  shell: "ufw status | grep -q 'Status: active'"
+  register: fts_ufw_active
+  failed_when: false
+  changed_when: false
+
+# only adds rules to a firewall that is already on; never enables ufw
+- name: Allow HTTP challenge and enrollment ports through ufw
+  command: "ufw allow {{ item }}/tcp"
+  loop:
+    - 80
+    - "{{ fts_enrollment_port }}"
+  when: fts_ufw_active.rc == 0
+
+# standalone mode answers the HTTP-01 challenge itself, so port 80 must be
+# reachable from the internet; renewals reuse the same settings
+- name: "Get Let's Encrypt certificate for {{ fts_enrollment_domain }}"
+  command: >
+    certbot certonly --standalone --non-interactive --agree-tos --keep-until-expiring
+    -d {{ fts_enrollment_domain }}
+    {{ ('--email ' + fts_enrollment_email) if fts_enrollment_email else '--register-unsafely-without-email' }}
+  args:
+    creates: "{{ fts_enrollment_cert_dir }}/fullchain.pem"
+
+- name: Create certbot deploy hook directory
+  file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    mode: 0755
+
+- name: Restart enrollment service when the certificate renews
+  copy:
+    dest: "/etc/letsencrypt/renewal-hooks/deploy/{{ fts_enrollment_service_name }}.sh"
+    content: |
+      #!/bin/sh
+      systemctl restart {{ fts_enrollment_service_name }}
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Template enrollment unit file
+  template:
+    src: fts-enrollment.service.j2
+    dest: "{{ unit_files_location }}/{{ fts_enrollment_service_name }}.service"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Enable and start enrollment service
+  systemd:
+    name: "{{ fts_enrollment_service_name }}"
+    enabled: true
+    state: restarted
+    daemon_reload: true

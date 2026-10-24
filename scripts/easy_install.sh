@@ -105,6 +105,9 @@ Available options:
     --dev-test   Sets TEST Envar to 1
     --dry-run    Sets up dependencies but exits before running any playbooks
     --ip-addr    Explicitly set IP address (when http://ifconfig.me/ip is wrong)
+    --domain     Enable username/password certificate enrollment on port 8446
+                 with a Let's Encrypt certificate for this domain (needs port 80 open)
+    --email      Email for Let's Encrypt expiry notices (optional, with --domain)
 USAGE_TEXT
   exit
 }
@@ -243,6 +246,17 @@ function parse_params() {
       FTS_IP_CUSTOM=$2
       shift 2
       echo "Using the IP of ${FTS_IP_CUSTOM}"
+      ;;
+
+    --domain)
+      FTS_ENROLLMENT_DOMAIN=$2
+      shift 2
+      echo "Enabling certificate enrollment for ${FTS_ENROLLMENT_DOMAIN}"
+      ;;
+
+    --email)
+      FTS_ENROLLMENT_EMAIL=$2
+      shift 2
       ;;
 
     --no-color)
@@ -611,6 +625,8 @@ function run_playbook() {
   env_vars="python3_version=$PY3_VER codename=$CODENAME itype=$INSTALL_TYPE"
   env_vars="$env_vars fts_version=$FTS_VERSION cfg_rpath=$CFG_RPATH fts_venv=${FTS_VENV}"
   [[ -n "${FTS_IP_CUSTOM:-}" ]] && env_vars="$env_vars fts_ip_addr_extra=$FTS_IP_CUSTOM"
+  [[ -n "${FTS_ENROLLMENT_DOMAIN:-}" ]] && env_vars="$env_vars fts_enrollment_domain=$FTS_ENROLLMENT_DOMAIN"
+  [[ -n "${FTS_ENROLLMENT_EMAIL:-}" ]] && env_vars="$env_vars fts_enrollment_email=$FTS_ENROLLMENT_EMAIL"
   [[ -n "${WEBMAP_FORCE_INSTALL:-}" ]] && env_vars="$env_vars $WEBMAP_FORCE_INSTALL"
   [[ -n "${CORE:-}" ]] && pb=install_mainserver || pb=install_all
   echo -e "${BLUE}Running Ansible Playbook ${GREEN}$pb${BLUE}...${NOFORMAT}"
