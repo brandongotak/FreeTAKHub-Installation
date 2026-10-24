@@ -17,6 +17,15 @@
     group: root
     mode: 0755
 
+# the UI's server update card calls this (as root) to check for and run updates
+- name: Install fts-update helper
+  template:
+    src: fts-update.j2
+    dest: /usr/local/sbin/fts-update
+    owner: root
+    group: root
+    mode: 0755
+
 - name: Template unit file
   template:
     src: fts-ui.service.j2

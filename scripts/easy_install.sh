@@ -108,6 +108,8 @@ Available options:
     --domain     Enable username/password certificate enrollment on port 8446
                  with a Let's Encrypt certificate for this domain (needs port 80 open)
     --email      Email for Let's Encrypt expiry notices (optional, with --domain)
+    --fts-ref    Install this FreeTAKServer git commit/branch instead of the default (rollback)
+    --ui-ref     Install this FreeTAKServer-UI git commit/branch instead of the default (rollback)
 USAGE_TEXT
   exit
 }
@@ -256,6 +258,16 @@ function parse_params() {
 
     --email)
       FTS_ENROLLMENT_EMAIL=$2
+      shift 2
+      ;;
+
+    --fts-ref)
+      FTS_GIT_REF=$2
+      shift 2
+      ;;
+
+    --ui-ref)
+      FTS_UI_GIT_REF=$2
       shift 2
       ;;
 
@@ -614,6 +626,20 @@ function generate_key_pair() {
 }
 
 ###############################################################################
+# Save the install options so fts-update (the UI's update button) can re-run
+# the installer the same way. Refs are left out: updates go to the latest.
+###############################################################################
+function save_install_options() {
+  mkdir -p /etc/freetakhub
+  cat >/etc/freetakhub/install.env <<EOF
+FTS_IP_CUSTOM=${FTS_IP_CUSTOM:-}
+FTS_ENROLLMENT_DOMAIN=${FTS_ENROLLMENT_DOMAIN:-}
+FTS_ENROLLMENT_EMAIL=${FTS_ENROLLMENT_EMAIL:-}
+BRANCH=${BRANCH}
+EOF
+}
+
+###############################################################################
 # Run Ansible playbook to install
 # https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_variables.html#defining-variables-at-runtime
 ###############################################################################
@@ -627,6 +653,8 @@ function run_playbook() {
   [[ -n "${FTS_IP_CUSTOM:-}" ]] && env_vars="$env_vars fts_ip_addr_extra=$FTS_IP_CUSTOM"
   [[ -n "${FTS_ENROLLMENT_DOMAIN:-}" ]] && env_vars="$env_vars fts_enrollment_domain=$FTS_ENROLLMENT_DOMAIN"
   [[ -n "${FTS_ENROLLMENT_EMAIL:-}" ]] && env_vars="$env_vars fts_enrollment_email=$FTS_ENROLLMENT_EMAIL"
+  [[ -n "${FTS_GIT_REF:-}" ]] && env_vars="$env_vars fts_git_ref=$FTS_GIT_REF"
+  [[ -n "${FTS_UI_GIT_REF:-}" ]] && env_vars="$env_vars fts_ui_git_ref=$FTS_UI_GIT_REF"
   [[ -n "${WEBMAP_FORCE_INSTALL:-}" ]] && env_vars="$env_vars $WEBMAP_FORCE_INSTALL"
   [[ -n "${CORE:-}" ]] && pb=install_mainserver || pb=install_all
   echo -e "${BLUE}Running Ansible Playbook ${GREEN}$pb${BLUE}...${NOFORMAT}"
@@ -659,5 +687,6 @@ add_passwordless_ansible_execution
 generate_key_pair
 
 [[ 0 -eq $DRY_RUN ]] || die "Dry run complete. Not running Ansible" 0
+save_install_options
 run_playbook
 cleanup

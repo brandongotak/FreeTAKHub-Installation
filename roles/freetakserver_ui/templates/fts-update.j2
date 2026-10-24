@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""update FreeTAKServer and its UI by re-running the FreeTAKHub installer
+
+    fts-update status              JSON: installed/latest commits, update state, log tail
+    fts-update start [--rollback]  run the installer as the transient fts-update unit
+
+The installer runs in its own systemd unit so it survives the restarts of
+fts and fts-ui it performs. Before an update the installed commits are saved
+so --rollback can reinstall them. Templated by the FreeTAKHub installer."""
+import datetime
+import json
+import os
+import subprocess
+import sys
+
+FTS_REPO = "{{ fts_git_repo }}"
+FTS_REF = "{{ fts_git_branch }}"
+UI_REPO = "{{ fts_ui_git_repo }}"
+UI_REF = "{{ fts_ui_git_branch }}"
+VENV_PYTHON = "{{ fts_venv }}/bin/python3"
+INSTALLER_DIR = "{{ playbook_dir }}"
+INSTALL_ENV = "/etc/freetakhub/install.env"
+STATE_DIR = "/var/lib/freetakhub"
+STATE_FILE = os.path.join(STATE_DIR, "update.json")
+PREVIOUS_FILE = os.path.join(STATE_DIR, "previous-commits.json")
+LOG_FILE = "/var/log/fts-update.log"
+UNIT = "fts-update"
+
+
+def now() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def read_json(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w") as f:
+        json.dump(data, f)
+    os.replace(path + ".tmp", path)
+
+
+def installed_commit(distribution: str):
+    """the git commit pip recorded when installing distribution from git, if any"""
+    code = ("import importlib.metadata as m, json, sys\n"
+            "try:\n"
+            f"    print(json.loads(m.distribution({distribution!r}).read_text('direct_url.json'))['vcs_info']['commit_id'])\n"
+            "except Exception:\n"
+            "    sys.exit(1)\n")
+    result = subprocess.run([VENV_PYTHON, "-c", code], capture_output=True, text=True)
+    return result.stdout.strip() or None
+
+
+def latest_commit(repo: str, ref: str):
+    try:
+        result = subprocess.run(["git", "ls-remote", repo, f"refs/heads/{ref}"],
+                                capture_output=True, text=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        return None
+    return result.stdout.split()[0] if result.returncode == 0 and result.stdout.strip() else None
+
+
+def running() -> bool:
+    return subprocess.run(["systemctl", "is-active", "--quiet", UNIT]).returncode == 0
+
+
+def status():
+    try:
+        with open(LOG_FILE, errors="replace") as f:
+            log_tail = f.readlines()[-40:]
+    except OSError:
+        log_tail = []
+    state = read_json(STATE_FILE, {"state": "idle"})
+    if state.get("state") == "running" and not running():
+        # the unit ended without recording a result (e.g. it was killed)
+        state["state"] = "failed"
+    return {
+        "fts": {"installed": installed_commit("FreeTAKServer"), "latest": latest_commit(FTS_REPO, FTS_REF),
+                "repo": FTS_REPO, "ref": FTS_REF},
+        "ui": {"installed": installed_commit("FreeTAKServer-UI"), "latest": latest_commit(UI_REPO, UI_REF),
+               "repo": UI_REPO, "ref": UI_REF},
+        "update": state,
+        "rollbackAvailable": bool(read_json(PREVIOUS_FILE, {}).get("fts")),
+        "log": "".join(log_tail),
+    }
+
+
+def start(rollback: bool):
+    if running():
+        return {"started": False, "message": "an update is already running"}
+    if rollback:
+        previous = read_json(PREVIOUS_FILE, {})
+        if not previous.get("fts"):
+            return {"started": False, "message": "no previous version recorded"}
+    else:
+        write_json(PREVIOUS_FILE, {"fts": installed_commit("FreeTAKServer"),
+                                   "ui": installed_commit("FreeTAKServer-UI"), "saved": now()})
+    command = ["systemd-run", f"--unit={UNIT}", "--collect", "--setenv=HOME=/root",
+               "/usr/bin/python3", os.path.abspath(__file__), "_run"] + (["--rollback"] if rollback else [])
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        return {"started": False, "message": result.stderr.strip() or "systemd-run failed"}
+    return {"started": True, "message": "rollback started" if rollback else "update started"}
+
+
+def installer_args(rollback: bool):
+    env = {}
+    try:
+        with open(INSTALL_ENV) as f:
+            for line in f:
+                key, sep, value = line.strip().partition("=")
+                if sep:
+                    env[key] = value
+    except OSError:
+        pass
+    args = []
+    for key, option in (("FTS_IP_CUSTOM", "--ip-addr"), ("FTS_ENROLLMENT_DOMAIN", "--domain"),
+                        ("FTS_ENROLLMENT_EMAIL", "--email"), ("BRANCH", "--branch")):
+        if env.get(key):
+            args += [option, env[key]]
+    if rollback:
+        previous = read_json(PREVIOUS_FILE, {})
+        args += ["--fts-ref", previous["fts"]]
+        if previous.get("ui"):
+            args += ["--ui-ref", previous["ui"]]
+    return args
+
+
+def run(rollback: bool):
+    """the body of the fts-update unit"""
+    write_json(STATE_FILE, {"state": "running", "kind": "rollback" if rollback else "update", "started": now()})
+    with open(LOG_FILE, "a") as log:
+        log.write(f"\n===== {'rollback' if rollback else 'update'} started {now()} =====\n")
+        log.flush()
+        # update the installer itself first so the run uses the latest playbook
+        subprocess.run(["git", "-C", INSTALLER_DIR, "pull", "--ff-only"], stdout=log, stderr=subprocess.STDOUT)
+        args = installer_args(rollback)
+        log.write(f"running easy_install.sh {' '.join(args)}\n")
+        log.flush()
+        result = subprocess.run(["bash", os.path.join(INSTALLER_DIR, "scripts", "easy_install.sh")] + args,
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+        log.write(f"===== finished {now()} with exit code {result.returncode} =====\n")
+    write_json(STATE_FILE, {"state": "succeeded" if result.returncode == 0 else "failed",
+                            "kind": "rollback" if rollback else "update",
+                            "started": read_json(STATE_FILE, {}).get("started"), "finished": now(),
+                            "exitCode": result.returncode})
+
+
+def main():
+    if os.geteuid() != 0:
+        sys.exit("fts-update must run as root")
+    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    rollback = "--rollback" in sys.argv[2:]
+    if command == "status":
+        print(json.dumps(status()))
+    elif command == "start":
+        print(json.dumps(start(rollback)))
+    elif command == "_run":
+        run(rollback)
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()
