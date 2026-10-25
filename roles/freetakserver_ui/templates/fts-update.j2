@@ -101,7 +101,9 @@ def start(rollback: bool):
     else:
         write_json(PREVIOUS_FILE, {"fts": installed_commit("FreeTAKServer"),
                                    "ui": installed_commit("FreeTAKServer-UI"), "saved": now()})
+    # systemd units start with a bare environment; the installer expects a login-like one
     command = ["systemd-run", f"--unit={UNIT}", "--collect", "--setenv=HOME=/root",
+               "--setenv=USER=root", "--setenv=LOGNAME=root",
                "/usr/bin/python3", os.path.abspath(__file__), "_run"] + (["--rollback"] if rollback else [])
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:

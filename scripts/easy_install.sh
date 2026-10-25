@@ -599,10 +599,12 @@ function add_passwordless_ansible_execution() {
     "${BLUE}Adding passwordless Ansible execution for the current user...${NOFORMAT}"
 
   # line to add
-  LINE="${USER} ALL=(ALL) NOPASSWD:/usr/bin/ansible-playbook"
+  # USER isn't set when run from a systemd unit (fts-update), and nounset is on
+  local user="${USER:-$(id -un)}"
+  LINE="${user} ALL=(ALL) NOPASSWD:/usr/bin/ansible-playbook"
 
   # file to create for passwordless
-  FILE="/etc/sudoers.d/dont-prompt-${USER}-for-sudo-password"
+  FILE="/etc/sudoers.d/dont-prompt-${user}-for-sudo-password"
 
   # only add if non-existent
   grep -qF -- "${LINE}" "${FILE}" || echo "${LINE}" >>"${FILE}"
