@@ -1,0 +1,12 @@
+# FreeTAKHub service logs: systemd appends to these (StandardOutput=append:)
+# and they were never rotated. copytruncate because the services keep the
+# files open.
+/var/log/fts/*.log /var/log/fts-ui/*.log /var/log/fts-enrollment/*.log /var/log/mediamtx/*.log /var/log/nodered/*.log /var/log/fts-update.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

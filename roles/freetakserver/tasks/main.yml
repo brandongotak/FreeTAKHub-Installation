@@ -37,3 +37,6 @@
 
 - name: Certificate enrollment
   include_tasks: "enrollment-{{ ansible_distribution }}.yml"
+
+- name: Log rotation and retention
+  include_tasks: "retention-{{ ansible_distribution }}.yml"

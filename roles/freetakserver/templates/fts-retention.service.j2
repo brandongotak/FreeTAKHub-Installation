@@ -1,0 +1,9 @@
+[Unit]
+Description=Delete old FreeTAKServer records (API call history, expired enrollment codes)
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ fts_data_path }}
+Environment="FTS_PERSISTENCE_PATH={{ fts_data_path }}"
+Environment="FTS_CONFIG_PATH={{ fts_config_path }}"
+ExecStart={{ fts_venv }}/bin/python3 -m FreeTAKServer.core.util.retention

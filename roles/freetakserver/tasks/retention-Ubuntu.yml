@@ -1,0 +1,26 @@
+---
+- name: Rotate FreeTAKHub service logs
+  copy:
+    src: logrotate-freetakhub
+    dest: /etc/logrotate.d/freetakhub
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Template retention service and timer
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ unit_files_location }}/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  loop:
+    - fts-retention.service
+    - fts-retention.timer
+
+- name: Enable daily retention cleanup
+  systemd:
+    name: fts-retention.timer
+    enabled: true
+    state: started
+    daemon_reload: true

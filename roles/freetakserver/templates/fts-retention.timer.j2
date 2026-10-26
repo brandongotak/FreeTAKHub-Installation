@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily FreeTAKServer retention cleanup
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+# catch up on a run missed while the server was off
+Persistent=true
+
+[Install]
+WantedBy=timers.target
