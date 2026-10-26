@@ -16,6 +16,10 @@ fts_ui_git_branch: fts-fork
 fts_ui_git_ref: "{{ fts_ui_git_branch }}"
 fts_ui_pip_spec: "git+{{ fts_ui_git_repo }}@{{ fts_ui_git_ref }}"
 
+# Flask secret for the UI's session cookie; generated once and reused on
+# reruns so updates don't sign everyone out
+fts_ui_secret_key: "{{ lookup('password', fts_secrets_path + '/fts_ui_secret_key chars=ascii_letters,digits length=48') }}"
+
 # system service name
 fts_ui_service_name: fts-ui
 

@@ -12,7 +12,9 @@ class Config(object):
 
     basedir    = os.path.abspath(os.path.dirname(__file__))
 
-    SECRET_KEY = 'key'
+    # signs the login session cookie; was the public constant 'key', which let
+    # anyone forge a logged-in session
+    SECRET_KEY = '{{ fts_ui_secret_key }}'
 
     # This will connect to the FTS db
     SQLALCHEMY_DATABASE_URI = 'sqlite:///' + '/opt/FTSServer-UI.db'
