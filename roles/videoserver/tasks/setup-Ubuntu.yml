@@ -15,11 +15,40 @@
     - "/usr/local/bin/{{ videoserver_legacy_service_name }}"
     - "/opt/{{ videoserver_legacy_service_name }}.yml"
 
+# the UI's video page can update MediaMTX on its own (mediamtx-update); a
+# later installer run must not downgrade that to videoserver_version or
+# replace the config of the version that is running
+- name: Check installed MediaMTX version
+  command: "{{ videoserver_executable_location }} --version"
+  register: videoserver_installed
+  changed_when: false
+  failed_when: false
+
+- name: Check for the MediaMTX config file
+  stat:
+    path: "{{ videoserver_config_location }}"
+  register: videoserver_config_stat
+
+- name: Decide whether to install MediaMTX
+  set_fact:
+    videoserver_install_needed: >-
+      {{ videoserver_installed.rc != 0
+         or not videoserver_config_stat.stat.exists
+         or (videoserver_installed.stdout | trim | regex_replace('^v', ''))
+            is version(videoserver_version | regex_replace('^v', ''), '<') }}
+
+- name: Print MediaMTX install decision
+  debug:
+    msg: >-
+      {{ ('installing MediaMTX ' ~ videoserver_version) if (videoserver_install_needed | bool)
+         else ('keeping installed MediaMTX ' ~ (videoserver_installed.stdout | trim)) }}
+
 - name: Create unpack directory
   file:
     path: "{{ videoserver_unpack_location }}"
     state: directory
     mode: 0755
+  when: videoserver_install_needed | bool
 
 - name: "Download and unarchive {{ videoserver_package_name }}"
   unarchive:
@@ -28,6 +57,7 @@
     remote_src: true
     owner: root
     group: root
+  when: videoserver_install_needed | bool
 
 - name: "Copy {{ videoserver_executable }} to {{ videoserver_executable_location }}"
   copy:
@@ -37,3 +67,13 @@
     group: root
     mode: 0755
     remote_src: true
+  when: videoserver_install_needed | bool
+
+# the UI's video page calls this (as root) to update MediaMTX by itself
+- name: Install mediamtx-update helper
+  template:
+    src: mediamtx-update.j2
+    dest: /usr/local/sbin/mediamtx-update
+    owner: root
+    group: root
+    mode: 0755

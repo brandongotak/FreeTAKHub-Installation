@@ -1,6 +1,8 @@
 ---
 # Start from the config bundled with the release so every key matches the
-# installed version, then change only what the hub needs.
+# installed version, then change only what the hub needs. Only when the
+# binary was (re)installed, so a version set up by mediamtx-update keeps
+# its config and any edits.
 - name: Install bundled config file
   copy:
     src: "{{ videoserver_unpack_location }}/{{ videoserver_config_file }}"
@@ -9,6 +11,7 @@
     group: root
     mode: 0644
     remote_src: true
+  when: videoserver_install_needed | bool
 
 - name: Configure video server
   lineinfile:

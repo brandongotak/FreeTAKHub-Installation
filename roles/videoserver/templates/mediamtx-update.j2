@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+"""update the MediaMTX video server on its own, without re-running the installer
+
+    mediamtx-update status                       JSON: installed/latest version, update state, log tail
+    mediamtx-update start [--version vX.Y.Z]     install the latest (or given) release
+    mediamtx-update start --rollback             go back to the binary the last update replaced
+
+The download is checked against the release's checksums.sha256. The new binary
+replaces {{ videoserver_executable_location }} and the service is restarted;
+if it doesn't come back up (for example the release dropped a key the config
+uses), the previous binary is put back and restarted. The config file is kept.
+Runs as the transient {{ videoserver_service_name }}-update unit so the UI can
+start it. Templated by the FreeTAKHub installer."""
+import datetime
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.request
+
+EXECUTABLE = "{{ videoserver_executable_location }}"
+PREVIOUS = EXECUTABLE + ".previous"
+CONFIG = "{{ videoserver_config_location }}"
+SERVICE = "{{ videoserver_service_name }}"
+API = "http://{{ videoserver_api_address }}"
+SERVICE_LOG = "/var/log/{{ videoserver_service_name }}/{{ videoserver_service_name }}-stdout.log"
+REPO = "bluenviron/mediamtx"
+STATE_DIR = "/var/lib/freetakhub"
+STATE_FILE = os.path.join(STATE_DIR, "mediamtx-update.json")
+LATEST_CACHE = os.path.join(STATE_DIR, "mediamtx-latest.json")
+LOG_FILE = "/var/log/mediamtx-update.log"
+UNIT = SERVICE + "-update"
+ARCHITECTURES = {"x86_64": "amd64", "aarch64": "arm64", "armv7l": "armv7", "armv6l": "armv6"}
+VERSION = re.compile(r"^v\d+\.\d+\.\d+$")
+# GitHub allows 60 unauthenticated API calls an hour; the UI checks on page load
+LATEST_CACHE_SECONDS = 600
+START_TIMEOUT = 20
+
+
+def now() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def read_json(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w") as f:
+        json.dump(data, f)
+    os.replace(path + ".tmp", path)
+
+
+def binary_version(path):
+    """the version a MediaMTX binary reports, e.g. v1.21.2"""
+    try:
+        result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    words = (result.stdout + result.stderr).split()
+    return next((word for word in words if VERSION.match(word)), None)
+
+
+def fetch(url, timeout=30) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": "mediamtx-update"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read()
+
+
+def latest_version():
+    cached = read_json(LATEST_CACHE, {})
+    if cached.get("version") and time.time() - cached.get("checked", 0) < LATEST_CACHE_SECONDS:
+        return cached["version"]
+    try:
+        tag = json.loads(fetch(f"https://api.github.com/repos/{REPO}/releases/latest", timeout=15))["tag_name"]
+    except Exception:
+        return cached.get("version")
+    if VERSION.match(tag):
+        write_json(LATEST_CACHE, {"version": tag, "checked": time.time()})
+        return tag
+    return cached.get("version")
+
+
+def running() -> bool:
+    return subprocess.run(["systemctl", "is-active", "--quiet", UNIT]).returncode == 0
+
+
+def status():
+    try:
+        with open(LOG_FILE, errors="replace") as f:
+            log_tail = f.readlines()[-40:]
+    except OSError:
+        log_tail = []
+    state = read_json(STATE_FILE, {"state": "idle"})
+    if state.get("state") == "running" and not running():
+        state["state"] = "failed"
+    service = subprocess.run(["systemctl", "is-active", SERVICE], capture_output=True, text=True).stdout.strip()
+    return {
+        "installed": binary_version(EXECUTABLE),
+        "latest": latest_version(),
+        "previous": binary_version(PREVIOUS) if os.path.exists(PREVIOUS) else None,
+        "service": service or "unknown",
+        "update": state,
+        "log": "".join(log_tail),
+    }
+
+
+def start(version, rollback: bool):
+    if running():
+        return {"started": False, "message": "a video server update is already running"}
+    if rollback and not os.path.exists(PREVIOUS):
+        return {"started": False, "message": "no previous video server version kept"}
+    if version and not VERSION.match(version):
+        return {"started": False, "message": f"not a MediaMTX version: {version!r}"}
+    command = ["systemd-run", f"--unit={UNIT}", "--collect", "/usr/bin/python3", os.path.abspath(__file__), "_run"]
+    command += ["--rollback"] if rollback else (["--version", version] if version else [])
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        return {"started": False, "message": result.stderr.strip() or "systemd-run failed"}
+    return {"started": True, "message": "video server rollback started" if rollback else "video server update started"}
+
+
+def healthy() -> bool:
+    """the service stays up and its API answers"""
+    deadline = time.time() + START_TIMEOUT
+    while time.time() < deadline:
+        time.sleep(2)
+        if subprocess.run(["systemctl", "is-active", "--quiet", SERVICE]).returncode != 0:
+            continue
+        try:
+            fetch(API + "/v3/paths/list", timeout=3)
+            # still up a moment later: not crash-looping on Restart=always
+            time.sleep(2)
+            return subprocess.run(["systemctl", "is-active", "--quiet", SERVICE]).returncode == 0
+        except Exception:
+            continue
+    return False
+
+
+def service_log_tail(lines=15) -> str:
+    try:
+        with open(SERVICE_LOG, errors="replace") as f:
+            return "".join(f.readlines()[-lines:])
+    except OSError:
+        return ""
+
+
+def download(version, workdir, log) -> str:
+    """download and verify the release, returning the path of the extracted binary"""
+    arch = ARCHITECTURES.get(platform.machine())
+    if not arch:
+        raise RuntimeError(f"no MediaMTX build for {platform.machine()}")
+    package = f"mediamtx_{version}_linux_{arch}.tar.gz"
+    base = f"https://github.com/{REPO}/releases/download/{version}/"
+    log(f"downloading {base}{package}")
+    data = fetch(base + package, timeout=300)
+    sums = fetch(base + "checksums.sha256").decode()
+    expected = next((line.split()[0] for line in sums.splitlines()
+                     if line.split() and line.split()[-1].lstrip("*") == package), None)
+    if expected is None:
+        raise RuntimeError(f"{package} is not listed in the release's checksums.sha256")
+    if hashlib.sha256(data).hexdigest() != expected:
+        raise RuntimeError(f"checksum mismatch for {package}")
+    log("checksum verified")
+    archive = os.path.join(workdir, package)
+    with open(archive, "wb") as f:
+        f.write(data)
+    with tarfile.open(archive) as tar:
+        member = tar.getmember("mediamtx")
+        if not member.isfile():
+            raise RuntimeError("the release has no mediamtx binary")
+        tar.extract(member, workdir)
+    path = os.path.join(workdir, "mediamtx")
+    os.chmod(path, 0o755)
+    return path
+
+
+def install(source, log):
+    """replace the binary with source and restart; False if it didn't come up"""
+    shutil.copy2(source, EXECUTABLE + ".new")
+    os.replace(EXECUTABLE + ".new", EXECUTABLE)
+    subprocess.run(["systemctl", "restart", SERVICE])
+    log(f"restarted {SERVICE}, waiting for it to answer")
+    return healthy()
+
+
+def run(version, rollback: bool):
+    """the body of the update unit"""
+    kind = "rollback" if rollback else "update"
+    write_json(STATE_FILE, {"state": "running", "kind": kind, "started": now()})
+    with open(LOG_FILE, "a") as log_file:
+        def log(message):
+            log_file.write(message + "\n")
+            log_file.flush()
+
+        log(f"\n===== video server {kind} started {now()} =====")
+        result, message = "failed", ""
+        current = binary_version(EXECUTABLE)
+        workdir = tempfile.mkdtemp(prefix="mediamtx-update-")
+        try:
+            if rollback:
+                source = os.path.join(workdir, "mediamtx")
+                shutil.copy2(PREVIOUS, source)
+                target = binary_version(source)
+            else:
+                target = version or latest_version()
+                if not target:
+                    raise RuntimeError("could not find the latest MediaMTX release")
+                if target == current:
+                    raise RuntimeError(f"{current} is already installed")
+                source = download(target, workdir, log)
+            if binary_version(source) is None:
+                raise RuntimeError("the new binary doesn't run on this machine")
+            log(f"installing {target} (was {current})")
+            backup = os.path.join(workdir, "current")
+            shutil.copy2(EXECUTABLE, backup)
+            if install(source, log):
+                # keep what was replaced for the rollback button (after a
+                # rollback that is the newer version, so it can be undone)
+                shutil.copy2(backup, PREVIOUS)
+                result, message = "succeeded", f"video server is now {target}"
+            else:
+                log(f"{target} did not start; its log ends with:\n{service_log_tail()}")
+                log(f"putting {current} back")
+                restored = install(backup, log)
+                message = (f"{target} did not start (see the log; its config may need changes), "
+                           + (f"{current} restored" if restored else f"and restoring {current} failed too"))
+        except Exception as e:
+            message = str(e)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+        log(f"===== {result}: {message} ({now()}) =====")
+    write_json(STATE_FILE, {"state": result, "kind": kind, "message": message,
+                            "started": read_json(STATE_FILE, {}).get("started"), "finished": now()})
+
+
+def main():
+    if os.geteuid() != 0:
+        sys.exit("mediamtx-update must run as root")
+    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    rollback = "--rollback" in sys.argv[2:]
+    version = sys.argv[sys.argv.index("--version") + 1] if "--version" in sys.argv[2:-1] else None
+    if command == "status":
+        print(json.dumps(status()))
+    elif command == "start":
+        print(json.dumps(start(version, rollback)))
+    elif command == "_run":
+        run(version, rollback)
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()
