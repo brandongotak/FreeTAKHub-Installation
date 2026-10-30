@@ -5,10 +5,9 @@ fts_ui_ipv4: 0.0.0.0
 # FreeTAKServer-UI pip package name
 fts_ui_pip_package_name: FreeTAKServer-UI
 
-# pip requirement spec used to install the UI: the fork's fts-fork branch is
-# v2.2.1 (the last PyPI release, same dependency pins as FTS) plus the
-# certificate enrollment setup page. Override with "FreeTAKServer-UI==2.2.1"
-# to use PyPI.
+# pip requirement spec used to install the UI: the fork's fts-fork branch
+# (3.0.0; the last PyPI release is 2.2.1). Override with
+# "FreeTAKServer-UI==2.2.1" to use PyPI.
 # updates follow fts_ui_git_branch; easy_install.sh --ui-ref overrides the
 # ref with a commit (used by fts-update --rollback)
 fts_ui_git_repo: "https://github.com/brandongotak/UI.git"
